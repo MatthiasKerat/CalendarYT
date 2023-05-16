@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">CalendarYT</string>
+    <string name="title_activity_ng_calendar_main">NgCalendarMainActivity</string>
+
 </resources>
