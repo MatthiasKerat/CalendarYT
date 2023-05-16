@@ -1,7 +1,6 @@
 package com.kapps.calendaryt
 
 import android.graphics.Paint
-import android.util.Log
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -17,25 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kapps.calendaryt.ui.theme.nightDark
-import com.kapps.calendaryt.ui.theme.orange
-import com.kapps.calendaryt.ui.theme.white
-import com.kapps.calendaryt.ui.theme.whiteGray
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
-
+import com.kapps.calendaryt.ui.theme.*
 import kotlinx.coroutines.launch
 import java.util.*
 
@@ -46,13 +36,14 @@ private val mapFrenchCalendar = listOf(7,1,2,3,4,5,6)
 
 /*
 TODO
- days that user can't select should be written in gray
- and not be selected
+ - add type calendar to choose two dates for use case :
+ ex. departure dat/arrival date, order/pickup
+ - disable a specific dates
  */
 @Composable
 fun FullCalendar(
-    numberOfDayBeforeCurrentDate : Int,
-    numberOfDayAfterCurrentDate : Int,
+    numberOfDaysBeforeCurrentDate : Int,
+    numberOfDaysAfterCurrentDate : Int,
     listenerClickDay : (FullDate) -> Unit
 ) {
     var calendarInputList by remember {
@@ -62,31 +53,30 @@ fun FullCalendar(
         mutableStateOf<CalendarInput?>(null)
     }
     var dayState by remember {
-        // 7 because it is the first date that will contain full correct date, and avoid value "0/0/0 listOf()", we can also put 8 to 28 range
+        // why 7 ?
+        // we know that "calendarInputList" contain all month dates but, if month begin in friday we put 0/0/0 in monday,tuesday,wednesday, thursday the in friday a correct day/month/year
+        // so in range of 7 ... 27 we sure that we avoid value "0/0/0" and get the alright day/month/year,
         mutableStateOf<FullDate?>(FullDate(calendarInputList[7].day.year,calendarInputList[7].day.month,calendarInputList[7].day.day, listOf()))
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
             .background(nightDark),
         contentAlignment = Alignment.TopCenter
     ) {
         Calendar(
-            numberOfDayBeforeCurrentDate = numberOfDayBeforeCurrentDate,
-            numberOfDayAfterCurrentDate = numberOfDayAfterCurrentDate,
-            onMonthAndYearClick = {
+            numberOfDaysBeforeCurrentDate = numberOfDaysBeforeCurrentDate,
+            numberOfDaysAfterCurrentDate = numberOfDaysAfterCurrentDate,
+            onMonthAndYearClicked = {
                 calendarInputList = it
                 // TODO find other solution
-                //  now we can just take the seventh element to display month and year.
-                // good to know that we assign value 0,0,0 to list that belongs to draw canvas, to say the first day in which day, so, seventh element should be at least contain the first day of year/month
+                //  now we can just take the seventh element to display month and year. see above the explanation
+                // good to know that we assign value 0,0,0 to list to draw canvas, should be at least contain the first day of year/month
                 dayState = FullDate(it[7].day.year,it[7].day.month,it[7].day.day, listOf())
-                /**
-                 * detect row's number
-                 */
-                CalendarStatic.CALENDAR_ROWS = detectNumberOfRow(calendarInputList)
+                 //detect row's number
+                CalendarStatic.CALENDAR_ROWS = findNumberOfRows(calendarInputList)
             },
-            onDayClick = { day ->
+            onDayClicked = { day ->
                 clickedCalendarElem = calendarInputList.find { it.day == day }
                 dayState = day
                 listenerClickDay(day)
@@ -99,21 +89,19 @@ fun FullCalendar(
         )
     }
 }
-val coroutineExceptionHandler = CoroutineExceptionHandler{ _,ex ->
-    Log.e("CalendarYT_Project","$ex")
-}
+
 @Composable
 fun Calendar(
-    numberOfDayBeforeCurrentDate : Int,
-    numberOfDayAfterCurrentDate: Int,
+    numberOfDaysBeforeCurrentDate : Int,
+    numberOfDaysAfterCurrentDate: Int,
     modifier: Modifier = Modifier,
-    onMonthAndYearClick: (List<CalendarInput>) -> Unit,
-    onDayClick:(FullDate)->Unit,
+    onMonthAndYearClicked: (List<CalendarInput>) -> Unit,
+    onDayClicked:(FullDate)->Unit,
     strokeWidth:Float = 5f,
     titleDate:String
 ) {
-    val startFilterDAY = getDateByAddingNumberOfDaysToCurrentDate(todayDate(),numberOfDayBeforeCurrentDate)
-    val endFilterDAY = getDateByAddingNumberOfDaysToCurrentDate(todayDate(),numberOfDayAfterCurrentDate)
+    val startFilterDAY = getDateByAddingNumberOfDaysToCurrentDate(todayDate(),numberOfDaysBeforeCurrentDate)
+    val endFilterDAY = getDateByAddingNumberOfDaysToCurrentDate(todayDate(),numberOfDaysAfterCurrentDate)
     var canvasSize by remember {
         mutableStateOf(Size.Zero)
     }
@@ -126,21 +114,20 @@ fun Calendar(
     var calendarInputList by remember {
         mutableStateOf(currentDateConfiguration())
     }
-
-    val scope = rememberCoroutineScope { coroutineExceptionHandler }
-
+    val scope = rememberCoroutineScope()
     Column(
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.End
+        verticalArrangement = Arrangement.Top,
+        horizontalAlignment = Alignment.Start
     ){
         Row(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Top
+            modifier = Modifier
+                .background(blueGray)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
         ) {
             IconButton(onClick = {
                 calendarInputList = previousCurrentDateConfiguration()
-                onMonthAndYearClick(calendarInputList)
+                onMonthAndYearClicked(calendarInputList)
             }) {
                 Icon(
                     painter = painterResource(R.drawable.previous),
@@ -155,7 +142,7 @@ fun Calendar(
             )
             IconButton(onClick = {
                 calendarInputList = nextCurrentDateConfiguration()
-                onMonthAndYearClick(calendarInputList)
+                onMonthAndYearClicked(calendarInputList)
             }) {
                 Icon(
                     painter = painterResource(R.drawable.next),
@@ -165,13 +152,14 @@ fun Calendar(
 
         }
         Column(
-            modifier = modifier,
+            modifier = Modifier.background(nightDark),
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.Start
         ) {
             Canvas(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(200.dp)
                     .pointerInput(true) {
                         detectTapGestures(
                             onTap = { offset ->
@@ -183,15 +171,19 @@ fun Calendar(
                                 find the clicked day the belong to canvas
                                  */
                                 val indexDay = (column - 1) + (row - 1) * CALENDAR_COLUMNS
-                                if(calendarInputList.size>indexDay){
+                                if (calendarInputList.size > indexDay) {
                                     val selectedDay = calendarInputList[indexDay]
                                     if (selectedDay.day.day <= calendarInputList.size) {
-                                        if(selectedDay.day in startFilterDAY..endFilterDAY){
+                                        if (selectedDay.day in startFilterDAY..endFilterDAY) {
                                             // call listener
-                                            onDayClick(selectedDay.day)
+                                            onDayClicked(selectedDay.day)
                                             clickAnimationOffset = offset
                                             scope.launch {
-                                                animate(0f, 225f, animationSpec = tween(300)) { value, _ ->
+                                                animate(
+                                                    0f,
+                                                    225f,
+                                                    animationSpec = tween(300)
+                                                ) { value, _ ->
                                                     animationRadius = value
                                                 }
                                             }
@@ -312,8 +304,8 @@ const val firstMonthOfYear = 1
  * @return compute full date by adding number of days
  */
 fun getDirectNextDate(fullDate: FullDate, numberDays : Int) : FullDate{
-    val numberOfDayPerYearAndMonth = getNumberDaysByMonth(fullDate.month,fullDate.year)
-    val a = if(numberOfDayPerYearAndMonth > fullDate.day){
+    val numberOfDaysPerYearAndMonth = getNumberDaysByMonth(fullDate.month,fullDate.year)
+    val dateAfterAddingOneDay = if(numberOfDaysPerYearAndMonth > fullDate.day){
          FullDate(fullDate.year,fullDate.month,fullDate.day+1, listOf())
     }else{
         if(fullDate.month==lastMonthOfYear){
@@ -323,9 +315,9 @@ fun getDirectNextDate(fullDate: FullDate, numberDays : Int) : FullDate{
         }
     }
     return if(numberDays>=2){
-        getDirectNextDate(a,numberDays - 1)
+        getDirectNextDate(dateAfterAddingOneDay,numberDays - 1)
     }else{
-        a
+        dateAfterAddingOneDay
     }
 }
 /**
@@ -334,25 +326,25 @@ fun getDirectNextDate(fullDate: FullDate, numberDays : Int) : FullDate{
  * @return compute full date by subtracting number of days
  */
 fun getDirectPreviousDate(fullDate: FullDate, numberDays : Int) : FullDate{
-    val a = if(1 < fullDate.day){
+    val dateAfterSubtractingOneDay = if(1 < fullDate.day){
         FullDate(fullDate.year,fullDate.month,fullDate.day-1, listOf())
     }else{
-        val numberOfDayPerYearAndMonth = getNumberDaysByMonth(fullDate.month-1,fullDate.year)
+        val numberOfDaysPerYearAndMonth = getNumberDaysByMonth(fullDate.month-1,fullDate.year)
         if(fullDate.month== firstMonthOfYear){
-            FullDate(fullDate.year-1, lastMonthOfYear,numberOfDayPerYearAndMonth, listOf())
+            FullDate(fullDate.year-1, lastMonthOfYear,numberOfDaysPerYearAndMonth, listOf())
         }else{
-            FullDate(fullDate.year,fullDate.month-1,numberOfDayPerYearAndMonth, listOf())
+            FullDate(fullDate.year,fullDate.month-1,numberOfDaysPerYearAndMonth, listOf())
         }
     }
     return if(numberDays<=-2){
-        getDirectNextDate(a,numberDays + 1)
+        getDirectPreviousDate(dateAfterSubtractingOneDay,numberDays + 1)
     }else{
-        a
+        dateAfterSubtractingOneDay
     }
 }
 
 // current date
-var current = CurrentDate(0,0)
+var current = CurrentDate()
 
 /**
  * return list of month
@@ -377,6 +369,9 @@ fun nextCurrentDateConfiguration(): List<CalendarInput>{
 fun isTheLastMonthOfYear() = current.month== lastMonthOfYear
 fun isTheFistMonthOfYear() = current.month== firstMonthOfYear
 
+/**
+ * @return
+ */
 fun previousCurrentDateConfiguration(): List<CalendarInput>{
     current = if(isTheFistMonthOfYear()){
         CurrentDate(lastMonthOfYear,current.year-1)
@@ -386,12 +381,21 @@ fun previousCurrentDateConfiguration(): List<CalendarInput>{
     return createCalendarList(current.month,current.year)
 }
 
+/**
+ * @return get number of day for a specific month/year
+ */
 fun getNumberDaysByMonth(month : Int, year : Int): Int{
     val calendar = Calendar.getInstance()
     calendar.set(Calendar.MONTH, month - 1)
     calendar.set(Calendar.YEAR, year)
     return calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 }
+
+/**
+ * @month
+ * @year
+ * @return the list displayed to the user
+ */
 
 private fun createCalendarList(month : Int, year : Int): List<CalendarInput> {
     val calendarInputs = mutableListOf<CalendarInput>()
@@ -424,7 +428,7 @@ private fun createCalendarList(month : Int, year : Int): List<CalendarInput> {
  * @listDay contain all days
  * @return
  */
-fun detectNumberOfRow(listDay : List<CalendarInput>) : Int{
+fun findNumberOfRows(listDay : List<CalendarInput>) : Int{
     val numberOfDays = 7
     var res = listDay.size / numberOfDays
     if((listDay.size % numberOfDays) != 0){
@@ -440,7 +444,7 @@ fun todayDate() : FullDate{
     val calendar = Calendar.getInstance()
     return FullDate(calendar.get(Calendar.YEAR),calendar.get(Calendar.MONTH) + 1,calendar.get(Calendar.DAY_OF_MONTH), listOf())
 }
-// by default
+// 5 rows by default
 object CalendarStatic{
     var CALENDAR_ROWS = 5
 }

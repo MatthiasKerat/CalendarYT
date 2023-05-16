@@ -1,3 +1,3 @@
 package com.kapps.calendaryt
 
-data class CurrentDate(val month : Int,val year : Int)
+data class CurrentDate(val month : Int=0,val year : Int=0)

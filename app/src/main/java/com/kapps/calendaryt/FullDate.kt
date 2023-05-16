@@ -1,8 +1,7 @@
 package com.kapps.calendaryt
 
-class FullDate(val year: Int, val month : Int, val day : Int, val hours: List<String>): Comparable<FullDate>{
+class FullDate(val year: Int=0, val month : Int=0, val day : Int=0, val hours: List<String> = listOf()): Comparable<FullDate>{
     override fun equals(other: Any?): Boolean {
-        //return super.equals(other)
         val day = other as FullDate
         return day.day==this.day && day.month==this.month && day.year==this.year
     }
